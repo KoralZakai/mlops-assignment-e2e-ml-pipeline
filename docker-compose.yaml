@@ -1,0 +1,88 @@
+# Airflow + MLflow + Postgres deployment for the evaluation pipeline.
+#
+#   cp .env.example .env          # set NEBIUS_API_KEY (and DOCKER_GID, see below)
+#   docker compose up -d --build
+#   # Airflow UI: http://localhost:8080   (admin / admin)
+#   # MLflow UI:  http://localhost:5000
+#
+# Runs the subprocess DAG `evaluate_agent` end to end; MLflow is reachable in-cluster
+# at http://mlflow:5000 and on the host at :5000. The agent + SWE-bench harness launch
+# their per-instance containers on the host daemon via the mounted docker socket.
+#
+# DOCKER_GID: the host's docker group gid so the container can use the socket.
+#   Find it with:  getent group docker | cut -d: -f3   (often 999 or 998)
+name: mlops-eval
+
+x-common-env: &common-env
+  MLFLOW_TRACKING_URI: http://mlflow:5000
+  MSWEA_COST_TRACKING: ignore_errors
+  NEBIUS_API_KEY: ${NEBIUS_API_KEY}
+
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: airflow
+      POSTGRES_DB: airflow
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "airflow"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  mlflow:
+    build: .                       # reuse the project image (has mlflow in its venv)
+    command:
+      - mlflow
+      - server
+      - --backend-store-uri
+      - sqlite:////data/mlflow.db
+      - --default-artifact-root
+      - /data/artifacts
+      - --host
+      - "0.0.0.0"
+      - --port
+      - "5000"
+      - --allowed-hosts
+      - "*"
+      - --cors-allowed-origins
+      - "*"
+    volumes:
+      - mlflow_data:/data
+    ports:
+      - "5000:5000"
+
+  airflow:
+    build:
+      context: .
+      dockerfile: Dockerfile.airflow
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      <<: *common-env
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+      AIRFLOW__CORE__DAGS_FOLDER: /opt/airflow/dags
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
+    user: "0:0"                    # root so it can use the mounted docker socket
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - ./scripts:/opt/airflow/scripts
+      - ./runs:/opt/airflow/runs
+      - /var/run/docker.sock:/var/run/docker.sock
+    ports:
+      - "8080:8080"
+    command:
+      - bash
+      - -c
+      - |
+        echo '{"admin": "admin"}' > /opt/airflow/simple_auth_manager_passwords.json.generated
+        exec airflow standalone
+
+volumes:
+  pgdata:
+  mlflow_data:

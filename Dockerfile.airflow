@@ -1,0 +1,19 @@
+# Airflow image for docker-compose: Airflow + uv + the project venv + docker CLI.
+# The DAGs shell out via `uv run`, so the image bakes in a /opt/airflow/.venv with
+# the project deps (mini-swe-agent, swebench, mlflow, boto3). docker.io gives the
+# docker CLI so the agent + SWE-bench harness can launch their containers via the
+# mounted /var/run/docker.sock (docker-out-of-docker).
+FROM apache/airflow:3.0.2
+
+USER root
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends docker.io \
+ && rm -rf /var/lib/apt/lists/*
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+
+USER airflow
+# Docker provider so evaluate_agent_docker.py can be imported.
+RUN pip install --no-cache-dir apache-airflow-providers-docker
+# Project venv for the `uv run` pipeline steps (same pyproject/uv.lock as the app image).
+COPY --chown=airflow:root pyproject.toml uv.lock /opt/airflow/
+RUN cd /opt/airflow && uv sync --locked

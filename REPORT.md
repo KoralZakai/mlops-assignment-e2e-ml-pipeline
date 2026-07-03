@@ -112,6 +112,18 @@ docker build -t mlops-agent .          # build the project image
 ```
 then trigger `evaluate_agent_docker` (mounts `runs/`, `mlruns/`, and `/var/run/docker.sock`).
 
+**Docker Compose (Airflow + MLflow + Postgres):**
+```bash
+cp .env.example .env                   # set NEBIUS_API_KEY
+docker compose up -d --build
+# Airflow UI: http://localhost:8080 (admin/admin)   MLflow UI: http://localhost:5000
+```
+`docker-compose.yaml` runs Postgres (Airflow metadata), MLflow (SQLite store on a volume,
+port 5000), and Airflow (custom `Dockerfile.airflow` = Airflow + uv + the project venv +
+docker CLI). The compose deployment runs the subprocess DAG `evaluate_agent`; MLflow is
+reachable in-cluster at `http://mlflow:5000`. The docker socket is mounted so the agent and
+SWE-bench harness launch their per-instance containers on the host daemon.
+
 ## Rerun by run-id
 
 Every run is fully described by `runs/<run-id>/config.json`. To reproduce, trigger the DAG
