@@ -15,5 +15,5 @@ USER airflow
 # Docker provider so evaluate_agent_docker.py can be imported.
 RUN pip install --no-cache-dir apache-airflow-providers-docker
 # Project venv for the `uv run` pipeline steps (same pyproject/uv.lock as the app image).
-COPY --chown=airflow:root pyproject.toml uv.lock /opt/airflow/
+COPY --chown=airflow:root pyproject.toml uv.lock .python-version /opt/airflow/
 RUN cd /opt/airflow && uv sync --locked
