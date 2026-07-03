@@ -6,6 +6,7 @@ Usage: python scripts/run_eval.py runs/<run-id>
 """
 
 import json
+import os
 import sys
 from pathlib import Path
 import subprocess
@@ -26,6 +27,8 @@ def main(run_dir: str) -> None:
             "--run_id", cfg["run_id"],
         ],
         cwd=eval_dir,
+        # PYTHONPATH="": use the project venv's pyarrow/datasets, not Airflow's
+        env={**os.environ, "PYTHONPATH": ""},
         check=True,
     )
 

@@ -28,7 +28,9 @@ def main(run_dir: str) -> None:
             # cost_limit is still recorded in config.json for provenance.
             "-o", str(agent_dir),
         ],
-        env={**os.environ, "MSWEA_COST_TRACKING": "ignore_errors"},
+        # PYTHONPATH="": don't let a host/Airflow PYTHONPATH shadow the project venv
+        # (e.g. Airflow's own pyarrow breaking datasets inside the compose container)
+        env={**os.environ, "MSWEA_COST_TRACKING": "ignore_errors", "PYTHONPATH": ""},
         check=True,
     )
 
